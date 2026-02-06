@@ -3,8 +3,10 @@
 import os
 import sys
 import shutil
+import tempfile
 
 from pathlib import Path
+from datetime import datetime
 
 USAGE = """\
 ajail - a simple script to make using bubblewrap in a folder easier.
@@ -23,6 +25,11 @@ usage: ajail [OPTION]... [<COMMAND>...]
                           unless rw is provided for persistence.
  --fs-edit                make changes to the root filesystem persistent.
  --no-net                 disable network access.
+ --clone                  if the current directory is a source repository,
+                          instead of mounting the current directory directly,
+                          we will make a new clone of the source repository,
+                          and mount that. pushing from inside will update the
+                          current directory's metadata.
 
 if [<command>...] is not provided, defaults to 'sh'."""
 
@@ -58,7 +65,39 @@ def mount_helper(exterior_path, interior_path, mount_type):
         raise Exception("unknown mount type %r", mount_type)
 
 
-def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command):
+def clone_repo(fs_to_use, pwd):
+    print("Cloning new independent workspace to ~/.ajail/clone/...")
+
+    # make directory for independent clone
+    os.makedirs(str(AJAIL_DIR / "clone"), exist_ok=True)
+    clone_dir = Path(tempfile.mkdtemp(
+        dir=str(AJAIL_DIR / "clone"),
+        prefix="%s-%s-" % (
+            nonalnum_replace(str(pwd), "_"),
+            datetime.now().strftime("%Y%m%d"))))
+
+    # clone current .git to new directory inside a jail
+    child = os.fork()
+    if child == 0:
+        os.chdir(clone_dir)
+        run(fs_to_use=fs_to_use, fs_mount=READONLY, pwd_mount=READWRITE,
+            network=False, submounts=[
+                (READONLY, str(pwd / ".git"), "/ajail/origin")],
+            command=["git", "clone", "-q", "/ajail/origin", "."],
+            clone=False, env_override=False)
+        raise Exception("unreachable")
+
+    # wait for clone
+    _, status = os.waitpid(child, 0)
+    if not os.WIFEXITED(status) or os.WEXITSTATUS(status) != 0:
+        print("Clone failed: %d." % status, file=sys.stderr)
+        os.exit(1)
+
+    return clone_dir
+
+
+def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command, clone,
+        env_override):
 
     if fs_to_use.startswith("/"):
         fs_path = Path(fs_to_use)
@@ -72,7 +111,8 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command):
             sys.exit(1)
 
         if not fs_path.exists():
-            print("Error: root fs %r does not exist" % fs_to_use, file=sys.stderr)
+            print("Error: root fs %r does not exist" % fs_to_use,
+                  file=sys.stderr)
             print("Available options: " + (
                 ", ".join(repr(d.name) for d in FS_DIR.iterdir() if d.is_dir())
                 or "none, please create a rootfs."
@@ -81,6 +121,13 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command):
 
     if shutil.which("bwrap") is None:
         print("Error: bwrap not found. Please install bubblewrap.",
+              file=sys.stderr)
+        sys.exit(1)
+
+    pwd = Path.cwd()
+
+    if clone and not (pwd / ".git").exists():
+        print("Error: clone mode only works with git repos right now.",
               file=sys.stderr)
         sys.exit(1)
 
@@ -107,13 +154,15 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command):
     # define new environment
     env = {
         "HOME": "/root",
-        "PATH": "/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PATH": ("/root/.local/bin:/usr/local/sbin:/usr/local/bin:"
+                 "/usr/sbin:/usr/bin:/sbin:/bin"),
         "TERM": os.environ.get("TERM", "xterm"),
     }
 
-    for name, val in os.environ.items():
-        if name.startswith("AJAIL_ENV_"):
-            env[name.removeprefix("AJAIL_ENV_")] = val
+    if env_override:
+        for name, val in os.environ.items():
+            if name.startswith("AJAIL_ENV_"):
+                env[name.removeprefix("AJAIL_ENV_")] = val
 
     for name, val in env.items():
         bwrap_cmd.extend(["--setenv", name, val])
@@ -134,10 +183,16 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command):
             "--ro-bind", "/etc/resolv.conf", "/etc/resolv.conf",
         ])
 
-    pwd = Path.cwd()
+    if clone:
+        clone_dir = clone_repo(fs_to_use=fs_to_use, pwd=pwd)
 
-    # mount pwd
-    bwrap_cmd.extend(mount_helper(pwd, pwd, pwd_mount))
+        # set up mounts
+        bwrap_cmd.extend(mount_helper(pwd / ".git", "/ajail/origin", pwd_mount))
+        bwrap_cmd.extend(mount_helper(clone_dir, pwd, pwd_mount))
+
+    else:
+        # mount pwd
+        bwrap_cmd.extend(mount_helper(pwd, pwd, pwd_mount))
 
     # mount submounts
     for mount_type, src, dest in submounts:
@@ -168,7 +223,9 @@ def main():
     network = True
     submounts = []
     command = []
+    clone = False
 
+    # tight control over argument parsing
     while args:
         arg = args[0]
         if arg.startswith("--"):
@@ -207,6 +264,9 @@ def main():
         elif arg == "-no-net":
             network = False
 
+        elif arg == "-clone":
+            clone = True
+
         elif arg == "-":
             command = args[1:]
             break
@@ -225,7 +285,8 @@ def main():
         command = ["sh"]
 
     run(fs_to_use=fs_to_use, fs_mount=fs_mount, pwd_mount=pwd_mount,
-        network=network, submounts=submounts, command=command)
+        network=network, submounts=submounts, command=command, clone=clone,
+        env_override=True)
     raise Exception("unreachable")
 
 

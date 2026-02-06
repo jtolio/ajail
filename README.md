@@ -6,7 +6,7 @@ is just a nice helper around
 
 instead of making a complex jail environment with many features, the goal here 
 to have something simple that you can audit by hand very quickly. it is
-currently < 250 loc of clean python.
+currently < 300 loc of clean python.
 
 ## high level picture
 
@@ -31,6 +31,13 @@ but it will disappear next session. the same applies to changes to `$HOME`.
 
 note that inside the jail, `$HOME` is `/root`, which can be found (and persisted
 with `--fs-edit`) at `~/.ajail/fs/<name>/root`.
+
+## cloning
+
+one special feature is `--clone`, which, if run inside a folder that is a source
+repository (e.g. a Git repo), instead of mounting it directly will make a clone
+with the current directory as the upstream, and mount that instead. this is
+extremely useful for running multiple AI agents concurrently.
 
 ## setup
 
@@ -79,6 +86,12 @@ usage: ajail [OPTION]... [<COMMAND>...]
                           unless rw is provided for persistence.
  --fs-edit                make changes to the root filesystem persistent.
  --no-net                 disable network access.
+ --clone                  if the current directory is a source repository,
+                          instead of mounting the current directory directly,
+                          we will make a new clone of the source repository
+                          with the source directory as the upstream repo and
+                          mount that. pushing from inside will update the
+                          current directory's metadata.
 
 if [<command>...] is not provided, defaults to 'sh'.
 ```
@@ -136,7 +149,7 @@ help of LLMs.
 
 * linux kernel >= 5.13 (overlayfs in user namespaces)
 * python >= 3.9
-* [bubblewrap](https://github.com/containers/bubblewrap)
+* [bubblewrap](https://github.com/containers/bubblewrap) >= 0.11.0
   (`sudo dnf install bubblewrap` or `sudo apt install bubblewrap`)
 
 * debootstrap for `mkdeb.sh`
