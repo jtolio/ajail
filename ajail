@@ -3,7 +3,6 @@
 import os
 import sys
 import shutil
-import subprocess
 
 from pathlib import Path
 
@@ -134,7 +133,7 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command):
 
     bwrap_cmd.extend(command)
 
-    sys.exit(subprocess.run(bwrap_cmd).returncode)
+    os.execvp(bwrap_cmd[0], bwrap_cmd)
 
 
 def main():
