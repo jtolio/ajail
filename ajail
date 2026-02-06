@@ -31,6 +31,10 @@ READWRITE = 1
 HIDEDIR = 2
 
 
+def nonalnum_replace(s, r):
+    return "".join(((c.isalnum() and c or r) for c in s))
+
+
 def mount_helper(exterior_path, interior_path, mount_type):
     if mount_type == READONLY:
         return [
@@ -93,15 +97,27 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command):
 
         # clear environment
         "--clearenv",
-        "--setenv", "HOME", "/root",
-        "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "--setenv", "TERM", os.environ.get("TERM", "xterm"),
     ]
 
+    # define new environment
+    env = {
+        "HOME": "/root",
+        "PATH": "/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "TERM": os.environ.get("TERM", "xterm"),
+    }
+
+    for name, val in os.environ.items():
+        if name.startswith("AJAIL_ENV_"):
+            env[name.removeprefix("AJAIL_ENV_")] = val
+
+    for name, val in env.items():
+        bwrap_cmd.extend(["--setenv", name, val])
+
+    # mount root
     bwrap_cmd.extend(mount_helper(fs_path, "/", fs_mount))
 
+    # essential mounts
     bwrap_cmd.extend([
-        # essential mounts
         "--dev", "/dev",
         "--proc", "/proc",
         "--tmpfs", "/tmp",
@@ -115,15 +131,17 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command):
 
     pwd = Path.cwd()
 
+    # mount pwd
     bwrap_cmd.extend(mount_helper(pwd, pwd, pwd_mount))
 
+    # mount submounts
     for mount_type, path in submounts:
         subpath = pwd / path
         bwrap_cmd.extend(mount_helper(subpath, subpath, mount_type))
 
     bwrap_cmd.extend([
         # set hostname
-        "--hostname", "ajail-" + "".join(filter(str.isalnum, fs_to_use)),
+        "--hostname", "ajail-" + nonalnum_replace(fs_to_use, "-"),
 
         # start in pwd
         "--chdir", str(pwd),
@@ -134,12 +152,13 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command):
     bwrap_cmd.extend(command)
 
     os.execvp(bwrap_cmd[0], bwrap_cmd)
+    raise Exception("unreachable")
 
 
 def main():
     args = sys.argv[1:]
 
-    fs_to_use = "default"
+    fs_to_use = os.environ.get("AJAIL_FS", "default")
     fs_mount = READONLY
     pwd_mount = READWRITE
     network = True
@@ -188,7 +207,9 @@ def main():
     if not command:
         command = ["sh"]
 
-    run(fs_to_use, fs_mount, pwd_mount, network, submounts, command)
+    run(fs_to_use=fs_to_use, fs_mount=fs_mount, pwd_mount=pwd_mount,
+        network=network, submounts=submounts, command=command)
+    raise Exception("unreachable")
 
 
 if __name__ == "__main__":

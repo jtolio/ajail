@@ -6,7 +6,7 @@ is just a nice helper around
 
 instead of making a complex jail environment with many features, the goal here 
 to have something simple that you can audit by hand very quickly. it is
-currently < 200 loc of clean python.
+currently < 250 loc of clean python.
 
 ## high level picture
 
@@ -57,7 +57,7 @@ for a basic setup, run
 
 ```
 sudo ./mkalpine.sh -u $(whoami) ~/.ajail/fs/default -p \
-  bash,build-base,alpine-sdk,go,python3,py3-pip,nodejs,npm,wget,curl
+  bash,build-base,alpine-sdk,go,python3,py3-pip,nodejs,npm,wget,curl,git
 ```
 
 ## usage
