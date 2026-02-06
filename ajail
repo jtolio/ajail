@@ -11,24 +11,27 @@ ajail - a simple script to make using bubblewrap in a folder easier.
 
 usage: ajail [OPTION]... [<COMMAND>...]
 
- --fs=<ROOT_FS>     specify the root fs to use. by default uses 'default'. if
-                    ROOT_FS is not an absolute path, the name is looked for
-                    at ~/.ajail/fs/<ROOT_FS>.
- --ro               wrap the current working directory in a temporary overlay.
- --ro=<SUBDIR>      wrap the provided subdirectory in a temporary overlay.
- --rw=<SUBDIR>      make changes to the provided subdirectory persistent.
- --hide=<SUBDIR>    make the provided subdirectory appear empty.
- --fs-edit          make changes to the root filesystem persistent.
- --no-net           disable network access.
+ --fs=<ROOT_FS>           specify the root fs to use. by default uses 'default'.
+                          if ROOT_FS is not an absolute path, the name is looked
+                          for at ~/.ajail/fs/<ROOT_FS>.
+ --ro                     wrap the current working directory in a temporary
+                          overlay.
+ --ro=<SUBDIR>            wrap the provided subdirectory in a temporary overlay.
+ --rw=<SUBDIR>            make changes to the provided subdirectory persistent.
+ --hide=<SUBDIR>          make the provided subdirectory appear empty.
+ --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary overlay
+                          unless rw is provided for persistence.
+ --fs-edit                make changes to the root filesystem persistent.
+ --no-net                 disable network access.
 
 if [<command>...] is not provided, defaults to 'sh'."""
 
 AJAIL_DIR = Path.home() / ".ajail"
 FS_DIR = AJAIL_DIR / "fs"
 
-READONLY = 0
-READWRITE = 1
-HIDEDIR = 2
+READONLY = 1
+READWRITE = 2
+HIDEDIR = 3
 
 
 def nonalnum_replace(s, r):
@@ -36,18 +39,20 @@ def nonalnum_replace(s, r):
 
 
 def mount_helper(exterior_path, interior_path, mount_type):
+    exterior_path = str(Path(exterior_path).absolute())
+    interior_path = str(Path(interior_path).absolute())
     if mount_type == READONLY:
         return [
-            "--overlay-src", str(exterior_path),
-            "--tmp-overlay", str(interior_path),
+            "--overlay-src", exterior_path,
+            "--tmp-overlay", interior_path,
         ]
     elif mount_type == READWRITE:
         return [
-            "--bind", str(exterior_path), str(interior_path),
+            "--bind", exterior_path, interior_path,
         ]
     elif mount_type == HIDEDIR:
         return [
-            "--tmpfs", str(interior_path),
+            "--tmpfs", interior_path,
         ]
     else:
         raise Exception("unknown mount type %r", mount_type)
@@ -135,9 +140,8 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command):
     bwrap_cmd.extend(mount_helper(pwd, pwd, pwd_mount))
 
     # mount submounts
-    for mount_type, path in submounts:
-        subpath = pwd / path
-        bwrap_cmd.extend(mount_helper(subpath, subpath, mount_type))
+    for mount_type, src, dest in submounts:
+        bwrap_cmd.extend(mount_helper(src, dest, mount_type))
 
     bwrap_cmd.extend([
         # set hostname
@@ -167,7 +171,6 @@ def main():
 
     while args:
         arg = args[0]
-
         if arg.startswith("--"):
             arg = arg[1:]
 
@@ -178,11 +181,25 @@ def main():
             pwd_mount = READONLY
 
         elif arg.startswith("-ro="):
-            submounts.append((READONLY, arg.removeprefix("-ro=")))
+            arg = arg.removeprefix("-ro=")
+            submounts.append((READONLY, arg, arg))
         elif arg.startswith("-rw="):
-            submounts.append((READWRITE, arg.removeprefix("-rw=")))
+            arg = arg.removeprefix("-rw=")
+            submounts.append((READWRITE, arg, arg))
         elif arg.startswith("-hide="):
-            submounts.append((HIDEDIR, arg.removeprefix("-hide=")))
+            arg = arg.removeprefix("-hide=")
+            submounts.append((HIDEDIR, "", arg))
+        elif arg.startswith("-mount="):
+            parts = arg.removeprefix("-mount=").split(",")
+            if len(parts) == 2:
+                submounts.append((READONLY, parts[0], parts[1]))
+            elif len(parts) == 3 and parts[2] in ("ro", "rw"):
+                submounts.append((
+                    parts[2] == "rw" and READWRITE or READONLY,
+                    parts[0], parts[1]))
+            else:
+                print(USAGE)
+                sys.exit(1)
 
         elif arg == "-fs-edit":
             fs_mount = READWRITE

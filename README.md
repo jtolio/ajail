@@ -67,15 +67,18 @@ ajail - a simple script to make using bubblewrap in a folder easier.
 
 usage: ajail [OPTION]... [<COMMAND>...]
 
- --fs=<ROOT_FS>     specify the root fs to use. by default uses 'default'. if
-                    ROOT_FS is not an absolute path, the name is looked for
-                    at ~/.ajail/fs/<ROOT_FS>.
- --ro               wrap the current working directory in a temporary overlay.
- --ro=<SUBDIR>      wrap the provided subdirectory in a temporary overlay.
- --rw=<SUBDIR>      make changes to the provided subdirectory persistent.
- --hide=<SUBDIR>    make the provided subdirectory appear empty.
- --fs-edit          make changes to the root filesystem persistent.
- --no-net           disable network access.
+ --fs=<ROOT_FS>           specify the root fs to use. by default uses 'default'.
+                          if ROOT_FS is not an absolute path, the name is looked
+                          for at ~/.ajail/fs/<ROOT_FS>.
+ --ro                     wrap the current working directory in a temporary
+                          overlay.
+ --ro=<SUBDIR>            wrap the provided subdirectory in a temporary overlay.
+ --rw=<SUBDIR>            make changes to the provided subdirectory persistent.
+ --hide=<SUBDIR>          make the provided subdirectory appear empty.
+ --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary overlay
+                          unless rw is provided for persistence.
+ --fs-edit                make changes to the root filesystem persistent.
+ --no-net                 disable network access.
 
 if [<command>...] is not provided, defaults to 'sh'.
 ```
@@ -101,6 +104,7 @@ ajail sh
   hole in an otherwise ephemeral place.
 * to make a directory appear empty (hide git history or something) you can do
   `--hide=dir`, like `--hide=.git`.
+* `--ro=`, `--rw=` are both just special forms of `--mount`.
 * if you want to mount the rootfs so you can make persistent changes to it,
   you can add `--fs-edit`
 * you can disallow network access using `--no-net`
