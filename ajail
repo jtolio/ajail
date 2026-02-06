@@ -148,6 +148,7 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command, clone,
         "PATH": ("/root/.local/bin:/usr/local/sbin:/usr/local/bin:"
                  "/usr/sbin:/usr/bin:/sbin:/bin"),
         "TERM": os.environ.get("TERM", "xterm"),
+        "IS_SANDBOX": "1",
     }
 
     if env_override:
