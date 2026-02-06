@@ -42,38 +42,32 @@ HIDEDIR = 3
 
 
 def nonalnum_replace(s, r):
-    return "".join(((c.isalnum() and c or r) for c in s))
+    return "".join(c if c.isalnum() else r for c in s)
 
 
 def mount_helper(exterior_path, interior_path, mount_type):
     exterior_path = str(Path(exterior_path).absolute())
     interior_path = str(Path(interior_path).absolute())
-    if mount_type == READONLY:
-        return [
-            "--overlay-src", exterior_path,
-            "--tmp-overlay", interior_path,
-        ]
-    elif mount_type == READWRITE:
-        return [
-            "--bind", exterior_path, interior_path,
-        ]
-    elif mount_type == HIDEDIR:
-        return [
-            "--tmpfs", interior_path,
-        ]
-    else:
-        raise Exception("unknown mount type %r", mount_type)
+    mounts = {
+        READONLY: ["--overlay-src", exterior_path, "--tmp-overlay", interior_path],
+        READWRITE: ["--bind", exterior_path, interior_path],
+        HIDEDIR: ["--tmpfs", interior_path],
+    }
+    if mount_type not in mounts:
+        raise Exception("unknown mount type: %r" % mount_type)
+    return mounts[mount_type]
 
 
 def clone_repo(fs_to_use, pwd):
     print("Cloning new independent workspace to ~/.ajail/clone/...")
 
     # make directory for independent clone
-    os.makedirs(str(AJAIL_DIR / "clone"), exist_ok=True)
+    clone_base = AJAIL_DIR / "clone"
+    os.makedirs(str(clone_base), exist_ok=True)
     clone_dir = Path(tempfile.mkdtemp(
-        dir=str(AJAIL_DIR / "clone"),
+        dir=str(clone_base),
         prefix="%s-%s-" % (
-            nonalnum_replace(str(pwd), "_"),
+            nonalnum_replace(str(pwd), '_'),
             datetime.now().strftime("%Y%m%d"))))
 
     # clone current .git to new directory inside a jail
@@ -90,8 +84,8 @@ def clone_repo(fs_to_use, pwd):
     # wait for clone
     _, status = os.waitpid(child, 0)
     if not os.WIFEXITED(status) or os.WEXITSTATUS(status) != 0:
-        print("Clone failed: %d." % status, file=sys.stderr)
-        os.exit(1)
+        print(f"Clone failed: {status}.", file=sys.stderr)
+        sys.exit(1)
 
     return clone_dir
 
@@ -105,19 +99,16 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command, clone,
         fs_path = FS_DIR / fs_to_use
 
     if not fs_path.exists():
-        if not FS_DIR.exists():
-            print("Error: root fs %r does not exist. please create a rootfs." %
-                fs_to_use, file=sys.stderr)
-            sys.exit(1)
-
-        if not fs_path.exists():
-            print("Error: root fs %r does not exist" % fs_to_use,
-                  file=sys.stderr)
-            print("Available options: " + (
-                ", ".join(repr(d.name) for d in FS_DIR.iterdir() if d.is_dir())
-                or "none, please create a rootfs."
-            ), file=sys.stderr)
-            sys.exit(1)
+        print("Error: root fs %r does not exist." % fs_to_use, file=sys.stderr)
+        options = ""
+        if FS_DIR.exists():
+            options = ", ".join(
+                repr(d.name) for d in FS_DIR.iterdir() if d.is_dir())
+        if options:
+            print("Available: " + options, file=sys.stderr)
+        else:
+            print("Please create a rootfs.", file=sys.stderr)
+        sys.exit(1)
 
     if shutil.which("bwrap") is None:
         print("Error: bwrap not found. Please install bubblewrap.",
@@ -141,7 +132,7 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command, clone,
         "--unshare-cgroup",
 
         # network access
-        (network and "--share-net" or "--unshare-net"),
+        "--share-net" if network else "--unshare-net",
 
         # user namespacing
         "--uid", "0",
@@ -252,7 +243,7 @@ def main():
                 submounts.append((READONLY, parts[0], parts[1]))
             elif len(parts) == 3 and parts[2] in ("ro", "rw"):
                 submounts.append((
-                    parts[2] == "rw" and READWRITE or READONLY,
+                    READWRITE if parts[2] == "rw" else READONLY,
                     parts[0], parts[1]))
             else:
                 print(USAGE)

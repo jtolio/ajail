@@ -142,8 +142,8 @@ ajail --fs-edit apk add vim
 
 ## LLM disclaimer:
 
-ajail is only-human-written, but mkalpine.sh and mkdeb.sh were created with the
-help of LLMs.
+ajail is human-written (but with light advice and suggestions from an LLM).
+mkalpine.sh and mkdeb.sh were created with the help of an LLM.
 
 ## requirements:
 
