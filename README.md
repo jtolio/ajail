@@ -140,6 +140,13 @@ this will install vim into an alpine based rootfs:
 ajail --fs-edit apk add vim
 ```
 
+this will start claude with its own clone of the current repo (be sure to
+tell it to push to another branch):
+
+```
+ajail --clone claude
+```
+
 ## LLM disclaimer:
 
 ajail is human-written (but with light advice and suggestions from an LLM).
