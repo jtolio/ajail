@@ -24,18 +24,20 @@ usage: ajail [OPTION]... [<COMMAND>...]
  --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary overlay
                           unless rw is provided for persistence.
  --fs-edit                make changes to the root filesystem persistent.
+ --home-edit              a subset of --fs-edit, make just jail-home changes
+                          persistent.
  --no-net                 disable network access.
  --clone                  if the current directory is a source repository,
                           instead of mounting the current directory directly,
                           we will make a new clone of the source repository,
                           and mount that. pushing from inside will update the
                           current directory's metadata.
+ --quiet                  no status output
 
 if [<command>...] is not provided, defaults to 'sh'."""
 
 AJAIL_DIR = Path.home() / ".ajail"
 FS_DIR = AJAIL_DIR / "fs"
-
 READONLY = 1
 READWRITE = 2
 HIDEDIR = 3
@@ -45,7 +47,7 @@ def nonalnum_replace(s, r):
     return "".join(c if c.isalnum() else r for c in s)
 
 
-def mount_helper(exterior_path, interior_path, mount_type):
+def mount_helper(exterior_path, interior_path, mount_type, show_status):
     exterior_path = str(Path(exterior_path).absolute())
     interior_path = str(Path(interior_path).absolute())
     mounts = {
@@ -55,11 +57,15 @@ def mount_helper(exterior_path, interior_path, mount_type):
     }
     if mount_type not in mounts:
         raise Exception("unknown mount type: %r" % mount_type)
+    if show_status:
+        print("  %s -> %s (%s)" % (
+            exterior_path if mount_type != HIDEDIR else "_",
+            interior_path, "rw" if mount_type == READWRITE else "ro"))
     return mounts[mount_type]
 
 
 def clone_repo(fs_to_use, pwd):
-    print("Cloning new independent workspace to ~/.ajail/clone/...")
+    print("  (Cloning new independent workspace...)")
 
     # make directory for independent clone
     clone_base = AJAIL_DIR / "clone"
@@ -77,8 +83,7 @@ def clone_repo(fs_to_use, pwd):
         run(fs_to_use=fs_to_use, fs_mount=READONLY, pwd_mount=READWRITE,
             network=False, submounts=[
                 (READONLY, str(pwd / ".git"), "/ajail/origin")],
-            command=["git", "clone", "-q", "/ajail/origin", "."],
-            clone=False, env_override=False)
+            command=["git", "clone", "-q", "/ajail/origin", "."])
         raise Exception("unreachable")
 
     # wait for clone
@@ -90,8 +95,8 @@ def clone_repo(fs_to_use, pwd):
     return clone_dir
 
 
-def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command, clone,
-        env_override):
+def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command,
+        clone=False, env_override=False, home_edit=False, show_status=False):
 
     if fs_to_use.startswith("/"):
         fs_path = Path(fs_to_use)
@@ -128,15 +133,13 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command, clone,
 
         # unshare-all only tries on some things. let's explicitly be even more
         # restrictive.
-        "--unshare-user",
-        "--unshare-cgroup",
+        "--unshare-user", "--unshare-cgroup",
 
         # network access
         "--share-net" if network else "--unshare-net",
 
         # user namespacing
-        "--uid", "0",
-        "--gid", "0",
+        "--uid", "0", "--gid", "0",
 
         # clear environment
         "--clearenv",
@@ -159,8 +162,15 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command, clone,
     for name, val in env.items():
         bwrap_cmd.extend(["--setenv", name, val])
 
+    if show_status:
+        print("Starting ajail %s in %s" % (fs_to_use, str(pwd)))
+        print("Networking:", "enabled" if network else "disabled")
+        print("Mounts:")
+
     # mount root
-    bwrap_cmd.extend(mount_helper(fs_path, "/", fs_mount))
+    bwrap_cmd.extend(mount_helper(fs_path, "/", fs_mount, show_status))
+    if home_edit and fs_mount != READWRITE:
+        bwrap_cmd.extend(mount_helper(fs_path / "root", "/root", READWRITE, show_status))
 
     # essential mounts
     bwrap_cmd.extend([
@@ -177,18 +187,15 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command, clone,
 
     if clone:
         clone_dir = clone_repo(fs_to_use=fs_to_use, pwd=pwd)
-
-        # set up mounts
-        bwrap_cmd.extend(mount_helper(pwd / ".git", "/ajail/origin", pwd_mount))
-        bwrap_cmd.extend(mount_helper(clone_dir, pwd, pwd_mount))
+        bwrap_cmd.extend(mount_helper(pwd / ".git", "/ajail/origin", pwd_mount, show_status))
+        bwrap_cmd.extend(mount_helper(clone_dir, pwd, pwd_mount, show_status))
 
     else:
-        # mount pwd
-        bwrap_cmd.extend(mount_helper(pwd, pwd, pwd_mount))
+        bwrap_cmd.extend(mount_helper(pwd, pwd, pwd_mount, show_status))
 
     # mount submounts
     for mount_type, src, dest in submounts:
-        bwrap_cmd.extend(mount_helper(src, dest, mount_type))
+        bwrap_cmd.extend(mount_helper(src, dest, mount_type, show_status))
 
     bwrap_cmd.extend([
         # set hostname
@@ -202,20 +209,24 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command, clone,
 
     bwrap_cmd.extend(command)
 
+    if show_status:
+        print("Starting\n")
+
     os.execvp(bwrap_cmd[0], bwrap_cmd)
     raise Exception("unreachable")
 
 
 def main():
     args = sys.argv[1:]
+    if os.environ.get("AJAIL_ARGS", ""):
+        args = os.environ.get("AJAIL_ARGS").split(":") + args
 
     fs_to_use = os.environ.get("AJAIL_FS", "default")
-    fs_mount = READONLY
-    pwd_mount = READWRITE
+    fs_mount, pwd_mount = READONLY, READWRITE
+    home_edit, clone, show_status = False, False, False
     network = True
     submounts = []
     command = []
-    clone = False
 
     # tight control over argument parsing
     while args:
@@ -252,12 +263,14 @@ def main():
 
         elif arg == "-fs-edit":
             fs_mount = READWRITE
-
+        elif arg == "-home-edit":
+            home_edit = True
         elif arg == "-no-net":
             network = False
-
         elif arg == "-clone":
             clone = True
+        elif arg == "-quiet":
+            show_status = False
 
         elif arg == "-":
             command = args[1:]
@@ -278,7 +291,7 @@ def main():
 
     run(fs_to_use=fs_to_use, fs_mount=fs_mount, pwd_mount=pwd_mount,
         network=network, submounts=submounts, command=command, clone=clone,
-        env_override=True)
+        env_override=True, home_edit=home_edit, show_status=show_status)
     raise Exception("unreachable")
 
 

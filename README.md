@@ -85,13 +85,15 @@ usage: ajail [OPTION]... [<COMMAND>...]
  --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary overlay
                           unless rw is provided for persistence.
  --fs-edit                make changes to the root filesystem persistent.
+ --home-edit              a subset of --fs-edit, make just jail-home changes
+                          persistent.
  --no-net                 disable network access.
  --clone                  if the current directory is a source repository,
                           instead of mounting the current directory directly,
-                          we will make a new clone of the source repository
-                          with the source directory as the upstream repo and
-                          mount that. pushing from inside will update the
+                          we will make a new clone of the source repository,
+                          and mount that. pushing from inside will update the
                           current directory's metadata.
+ --quiet                  no status output
 
 if [<command>...] is not provided, defaults to 'sh'.
 ```
