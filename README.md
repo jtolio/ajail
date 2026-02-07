@@ -30,14 +30,14 @@ packages can be installed ephemerally. `apk add nodejs` will install `nodejs`
 but it will disappear next session. the same applies to changes to `$HOME`.
 
 note that inside the jail, `$HOME` is `/root`, which can be found (and persisted
-with `--fs-edit`) at `~/.ajail/fs/<name>/root`.
+with `--home-edit` or `--fs-edit`) at `~/.ajail/fs/<name>/root`.
 
 ## cloning
 
 one special feature is `--clone`, which, if run inside a folder that is a source
 repository (e.g. a Git repo), instead of mounting it directly will make a clone
-with the current directory as the upstream, and mount that instead. this is
-extremely useful for running multiple AI agents concurrently.
+with the current directory repository as the upstream, and mount that instead.
+this is extremely useful for running multiple AI agents concurrently.
 
 ## setup
 
@@ -124,6 +124,23 @@ ajail sh
 * if you want to mount the rootfs so you can make persistent changes to it,
   you can add `--fs-edit`
 * you can disallow network access using `--no-net`
+
+## environment variable control
+
+ajail also respects the environment variable `AJAIL_ARGS`, which is a set of
+arguments separated by semicolon. any argument ajail understands can also
+be provided via this environment variable. `AJAIL_ARGS` is evaluated first, so
+arguments specified on the commandline are processed after and thus take
+precedence. this feature can be useful for changing the default behavior
+(e.g., change the default root fs by setting `AJAIL_ARGS=--fs=newdefault`) in
+certain directories or contexts using something like
+[direnv](https://github.com/direnv/direnv).
+
+ajail strips the environment before passing it into the jail down to the bare
+minimum, but you can specify environment variables you do want to go into the
+jail by using environment variables prefixed with `AJAIL_ENV_`. if you want
+to specify the `$PATH` or something else to be something different, you can set
+`AJAIL_ENV_PATH` and it will override the default.
 
 ## example:
 

@@ -223,9 +223,9 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
 def main():
     args = sys.argv[1:]
     if os.environ.get("AJAIL_ARGS", ""):
-        args = os.environ.get("AJAIL_ARGS").split(":") + args
+        args = os.environ.get("AJAIL_ARGS").split(";") + args
 
-    fs_to_use = os.environ.get("AJAIL_FS", "default")
+    fs_to_use = "default"
     pwd_type = READWRITE
     clone, show_status = False, True
     network = True
