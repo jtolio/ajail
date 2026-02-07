@@ -23,9 +23,10 @@ usage: ajail [OPTION]... [<COMMAND>...]
  --hide=<SUBDIR>          make the provided subdirectory appear empty.
  --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary overlay
                           unless rw is provided for persistence.
- --fs-edit                make changes to the root filesystem persistent.
- --home-edit              a subset of --fs-edit, make just jail-home changes
-                          persistent.
+ --fs-edit[=<DIR>]        make changes to the root filesystem persistent. if
+                          <DIR> is provided, just that subtree.
+ --home-edit[=<SUBDIR>]   a subset of --fs-edit, make just jail-home changes
+                          persistent, optionally just a subdirectory.
  --no-net                 disable network access.
  --clone                  if the current directory is a source repository,
                           instead of mounting the current directory directly,
@@ -65,8 +66,6 @@ def mount_helper(exterior_path, interior_path, mount_type, show_status):
 
 
 def clone_repo(fs_to_use, pwd):
-    print("  (Cloning new independent workspace...)")
-
     # make directory for independent clone
     clone_base = AJAIL_DIR / "clone"
     os.makedirs(str(clone_base), exist_ok=True)
@@ -80,9 +79,8 @@ def clone_repo(fs_to_use, pwd):
     child = os.fork()
     if child == 0:
         os.chdir(clone_dir)
-        run(fs_to_use=fs_to_use, fs_mount=READONLY, pwd_mount=READWRITE,
-            network=False, submounts=[
-                (READONLY, str(pwd / ".git"), "/ajail/origin")],
+        run(fs_to_use=fs_to_use, pwd_type=READWRITE, network=False, fs_edits=[],
+            submounts=[(READONLY, str(pwd / ".git"), "/ajail/origin")],
             command=["git", "clone", "-q", "/ajail/origin", "."])
         raise Exception("unreachable")
 
@@ -95,8 +93,8 @@ def clone_repo(fs_to_use, pwd):
     return clone_dir
 
 
-def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command,
-        clone=False, env_override=False, home_edit=False, show_status=False):
+def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
+        clone=False, env_override=False, show_status=False):
 
     if fs_to_use.startswith("/"):
         fs_path = Path(fs_to_use)
@@ -163,14 +161,17 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command,
         bwrap_cmd.extend(["--setenv", name, val])
 
     if show_status:
-        print("Starting ajail %s in %s" % (fs_to_use, str(pwd)))
+        print("ajail %s in %s" % (fs_to_use, str(pwd)))
         print("Networking:", "enabled" if network else "disabled")
         print("Mounts:")
 
     # mount root
-    bwrap_cmd.extend(mount_helper(fs_path, "/", fs_mount, show_status))
-    if home_edit and fs_mount != READWRITE:
-        bwrap_cmd.extend(mount_helper(fs_path / "root", "/root", READWRITE, show_status))
+    if "/" in fs_edits:
+        bwrap_cmd.extend(mount_helper(fs_path, "/", READWRITE, show_status))
+    else:
+        bwrap_cmd.extend(mount_helper(fs_path, "/", READONLY, show_status))
+        for path in fs_edits:
+            bwrap_cmd.extend(mount_helper(str(fs_path) + path, path, READWRITE, show_status))
 
     # essential mounts
     bwrap_cmd.extend([
@@ -186,12 +187,15 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command,
         ])
 
     if clone:
+        if show_status:
+            print("  (Cloning new independent workspace...)")
+
         clone_dir = clone_repo(fs_to_use=fs_to_use, pwd=pwd)
-        bwrap_cmd.extend(mount_helper(pwd / ".git", "/ajail/origin", pwd_mount, show_status))
-        bwrap_cmd.extend(mount_helper(clone_dir, pwd, pwd_mount, show_status))
+        bwrap_cmd.extend(mount_helper(pwd / ".git", "/ajail/origin", pwd_type, show_status))
+        bwrap_cmd.extend(mount_helper(clone_dir, pwd, pwd_type, show_status))
 
     else:
-        bwrap_cmd.extend(mount_helper(pwd, pwd, pwd_mount, show_status))
+        bwrap_cmd.extend(mount_helper(pwd, pwd, pwd_type, show_status))
 
     # mount submounts
     for mount_type, src, dest in submounts:
@@ -210,7 +214,7 @@ def run(fs_to_use, fs_mount, pwd_mount, network, submounts, command,
     bwrap_cmd.extend(command)
 
     if show_status:
-        print("Starting\n")
+        print("Starting...\n")
 
     os.execvp(bwrap_cmd[0], bwrap_cmd)
     raise Exception("unreachable")
@@ -222,10 +226,10 @@ def main():
         args = os.environ.get("AJAIL_ARGS").split(":") + args
 
     fs_to_use = os.environ.get("AJAIL_FS", "default")
-    fs_mount, pwd_mount = READONLY, READWRITE
-    home_edit, clone, show_status = False, False, False
+    pwd_type = READWRITE
+    clone, show_status = False, True
     network = True
-    submounts = []
+    submounts, fs_edits = [], []
     command = []
 
     # tight control over argument parsing
@@ -238,7 +242,7 @@ def main():
             fs_to_use = arg.removeprefix("-fs=")
 
         elif arg == "-ro":
-            pwd_mount = READONLY
+            pwd_type = READONLY
 
         elif arg.startswith("-ro="):
             arg = arg.removeprefix("-ro=")
@@ -261,10 +265,11 @@ def main():
                 print(USAGE)
                 sys.exit(1)
 
-        elif arg == "-fs-edit":
-            fs_mount = READWRITE
-        elif arg == "-home-edit":
-            home_edit = True
+        elif arg.startswith("-fs-edit"):
+            fs_edits.append("/" + arg.removeprefix("-fs-edit").removeprefix("=").removeprefix("/"))
+        elif arg.startswith("-home-edit"):
+            fs_edits.append("/root/" + arg.removeprefix("-home-edit").removeprefix("="))
+
         elif arg == "-no-net":
             network = False
         elif arg == "-clone":
@@ -289,9 +294,9 @@ def main():
     if not command:
         command = ["sh"]
 
-    run(fs_to_use=fs_to_use, fs_mount=fs_mount, pwd_mount=pwd_mount,
-        network=network, submounts=submounts, command=command, clone=clone,
-        env_override=True, home_edit=home_edit, show_status=show_status)
+    run(fs_to_use=fs_to_use, pwd_type=pwd_type, network=network,
+        submounts=submounts, fs_edits=fs_edits, command=command, clone=clone,
+        env_override=True, show_status=show_status)
     raise Exception("unreachable")
 
 

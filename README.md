@@ -6,7 +6,7 @@ is just a nice helper around
 
 instead of making a complex jail environment with many features, the goal here 
 to have something simple that you can audit by hand very quickly. it is
-currently < 300 loc of clean python.
+currently ~ 300 lines of clean python.
 
 ## high level picture
 
@@ -84,9 +84,10 @@ usage: ajail [OPTION]... [<COMMAND>...]
  --hide=<SUBDIR>          make the provided subdirectory appear empty.
  --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary overlay
                           unless rw is provided for persistence.
- --fs-edit                make changes to the root filesystem persistent.
- --home-edit              a subset of --fs-edit, make just jail-home changes
-                          persistent.
+ --fs-edit[=<DIR>]        make changes to the root filesystem persistent. if
+                          <DIR> is provided, just that subtree.
+ --home-edit[=<SUBDIR>]   a subset of --fs-edit, make just jail-home changes
+                          persistent, optionally just a subdirectory.
  --no-net                 disable network access.
  --clone                  if the current directory is a source repository,
                           instead of mounting the current directory directly,
@@ -126,11 +127,11 @@ ajail sh
 
 ## example:
 
-this will run claude code in the current directory without write access to
-`./.git`:
+this will run Claude Code in the current directory without write access to
+`./.git`, but with write access to Claude's settings:
 
 ```
-ajail --ro=.git claude
+ajail --ro=.git --home-edit=.claude --home-edit=.claude.json claude
 ```
 
 (note that you will need to install and configure claude with `--fs-edit`
