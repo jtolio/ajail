@@ -39,6 +39,14 @@ repository (e.g. a Git repo), instead of mounting it directly will make a clone
 with the current directory repository as the upstream, and mount that instead.
 this is extremely useful for running multiple AI agents concurrently.
 
+## remote access
+
+remote access is outside of the scope of this specific project, but is 
+extremely easy to set up. you can run
+[singleuser-sshd](https://github.com/jtolio/singleuser-sshd) inside the jail,
+and then connect to that externally (either directly or through a tailnet or 
+something).
+
 ## setup
 
 ajail comes with two scripts, mkalpine.sh and mkdeb.sh. both scripts create
