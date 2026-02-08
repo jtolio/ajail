@@ -265,9 +265,9 @@ def main():
                 print(USAGE)
                 sys.exit(1)
 
-        elif arg.startswith("-fs-edit"):
+        elif arg == "-fs-edit" or arg.startswith("-fs-edit="):
             fs_edits.append("/" + arg.removeprefix("-fs-edit").removeprefix("=").removeprefix("/"))
-        elif arg.startswith("-home-edit"):
+        elif arg == "-home-edit" or arg.startswith("-home-edit="):
             fs_edits.append("/root/" + arg.removeprefix("-home-edit").removeprefix("="))
 
         elif arg == "-no-net":
