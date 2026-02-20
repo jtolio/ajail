@@ -52,11 +52,10 @@ def mount_helper(exterior_path, interior_path, mount_type, show_status):
         READONLY: ["--overlay-src", exterior_path, "--tmp-overlay", interior_path],
         READWRITE: ["--bind", exterior_path, interior_path],
         HIDEDIR: ["--tmpfs", interior_path],
-        SKIPMOUNT: [],
     }
     if mount_type not in mounts:
         raise Exception("unknown mount type: %r" % mount_type)
-    if show_status and mounts[mount_type]:
+    if show_status:
         print("  %s -> %s (%s)" % (
             exterior_path if mount_type != HIDEDIR else "_",
             interior_path, "rw" if mount_type == READWRITE else "ro"))
@@ -204,7 +203,7 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
         "--hostname", "ajail-" + nonalnum_replace(fs_to_use, "-"),
 
         # start in pwd if mounted
-        "--chdir", str(pwd) if pwd_type != SKIPMOUNT else "/root",
+        "--chdir", str(pwd),
 
         "--"
     ])
@@ -240,8 +239,7 @@ def main():
             fs_to_use = arg.removeprefix("-fs=")
 
         elif arg in ("-ro", "-rw", "-hide"):
-            pwd_type = {"-ro": READONLY, "-rw": READWRITE, "-hide": SKIPMOUNT}[
-                arg]
+            pwd_type = {"-ro": READONLY, "-rw": READWRITE, "-hide": HIDEDIR}[arg]
 
         elif arg.startswith("-ro="):
             arg = arg.removeprefix("-ro=")
