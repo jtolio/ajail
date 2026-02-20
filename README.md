@@ -85,11 +85,10 @@ usage: ajail [OPTION]... [<COMMAND>...]
  --fs=<ROOT_FS>           specify the root fs to use. by default uses 'default'.
                           if ROOT_FS is not an absolute path, the name is looked
                           for at ~/.ajail/fs/<ROOT_FS>.
- --ro                     wrap the current working directory in a temporary
-                          overlay.
- --ro=<SUBDIR>            wrap the provided subdirectory in a temporary overlay.
- --rw=<SUBDIR>            make changes to the provided subdirectory persistent.
- --hide=<SUBDIR>          make the provided subdirectory appear empty.
+ --ro[=<DIR>]             wrap the provided directory in a temporary overlay.
+                          if no directory is specified, cwd is assumed.
+ --rw[=<DIR>]             make changes to the provided directory persistent.
+ --hide[=<DIR>]           make the provided directory appear empty.
  --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary overlay
                           unless rw is provided for persistence.
  --fs-edit[=<DIR>]        make changes to the root filesystem persistent. if
@@ -173,6 +172,12 @@ tell it to push to another branch):
 
 ```
 ajail --clone claude
+```
+
+this will start ajail with nothing but the root fs mounted ro:
+
+```
+ajail --hide
 ```
 
 ## LLM disclaimer:

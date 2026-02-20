@@ -16,11 +16,10 @@ usage: ajail [OPTION]... [<COMMAND>...]
  --fs=<ROOT_FS>           specify the root fs to use. by default uses 'default'.
                           if ROOT_FS is not an absolute path, the name is looked
                           for at ~/.ajail/fs/<ROOT_FS>.
- --ro                     wrap the current working directory in a temporary
-                          overlay.
- --ro=<SUBDIR>            wrap the provided subdirectory in a temporary overlay.
- --rw=<SUBDIR>            make changes to the provided subdirectory persistent.
- --hide=<SUBDIR>          make the provided subdirectory appear empty.
+ --ro[=<DIR>]             wrap the provided directory in a temporary overlay.
+                          if no directory is specified, cwd is assumed.
+ --rw[=<DIR>]             make changes to the provided directory persistent.
+ --hide[=<DIR>]           make the provided directory appear empty.
  --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary overlay
                           unless rw is provided for persistence.
  --fs-edit[=<DIR>]        make changes to the root filesystem persistent. if
@@ -39,9 +38,7 @@ if [<command>...] is not provided, defaults to 'sh'."""
 
 AJAIL_DIR = Path.home() / ".ajail"
 FS_DIR = AJAIL_DIR / "fs"
-READONLY = 1
-READWRITE = 2
-HIDEDIR = 3
+READONLY, READWRITE, HIDEDIR, SKIPMOUNT = 1, 2, 3, 4
 
 
 def nonalnum_replace(s, r):
@@ -55,10 +52,11 @@ def mount_helper(exterior_path, interior_path, mount_type, show_status):
         READONLY: ["--overlay-src", exterior_path, "--tmp-overlay", interior_path],
         READWRITE: ["--bind", exterior_path, interior_path],
         HIDEDIR: ["--tmpfs", interior_path],
+        SKIPMOUNT: [],
     }
     if mount_type not in mounts:
         raise Exception("unknown mount type: %r" % mount_type)
-    if show_status:
+    if show_status and mounts[mount_type]:
         print("  %s -> %s (%s)" % (
             exterior_path if mount_type != HIDEDIR else "_",
             interior_path, "rw" if mount_type == READWRITE else "ro"))
@@ -186,7 +184,7 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
             "--ro-bind", "/etc/resolv.conf", "/etc/resolv.conf",
         ])
 
-    if clone:
+    if clone and pwd_type in (READONLY, READWRITE):
         if show_status:
             print("  (Cloning new independent workspace...)")
 
@@ -205,8 +203,8 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
         # set hostname
         "--hostname", "ajail-" + nonalnum_replace(fs_to_use, "-"),
 
-        # start in pwd
-        "--chdir", str(pwd),
+        # start in pwd if mounted
+        "--chdir", str(pwd) if pwd_type != SKIPMOUNT else "/root",
 
         "--"
     ])
@@ -241,8 +239,9 @@ def main():
         if arg.startswith("-fs="):
             fs_to_use = arg.removeprefix("-fs=")
 
-        elif arg == "-ro":
-            pwd_type = READONLY
+        elif arg in ("-ro", "-rw", "-hide"):
+            pwd_type = {"-ro": READONLY, "-rw": READWRITE, "-hide": SKIPMOUNT}[
+                arg]
 
         elif arg.startswith("-ro="):
             arg = arg.removeprefix("-ro=")
