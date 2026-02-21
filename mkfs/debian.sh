@@ -48,6 +48,7 @@ die() {
 }
 
 # Parse arguments
+POSITIONAL=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -s|--suite)
@@ -73,17 +74,18 @@ while [[ $# -gt 0 ]]; do
             die "Unknown option: $1"
             ;;
         *)
-            break
+            POSITIONAL+=("$1")
+            shift
             ;;
     esac
 done
 
 # Check for output directory argument
-if [[ $# -lt 1 ]]; then
+if [[ ${#POSITIONAL[@]} -lt 1 ]]; then
     usage 1
 fi
 
-OUTPUT_DIR="$1"
+OUTPUT_DIR="${POSITIONAL[0]}"
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
@@ -138,6 +140,20 @@ fi
 # Run debootstrap
 echo "Running debootstrap..."
 debootstrap "${DEBOOTSTRAP_ARGS[@]}" "$SUITE" "$OUTPUT_DIR" "$MIRROR"
+
+# Configure apt to work in single-uid environments:
+# 1. Don't drop privileges to _apt user for downloads
+# 2. Don't try to chown the cache/lists
+mkdir -p "$OUTPUT_DIR/etc/apt/apt.conf.d"
+cat > "$OUTPUT_DIR/etc/apt/apt.conf.d/99-single-uid.conf" <<'EOF'
+APT::Sandbox::User "root";
+EOF
+
+# Configure dpkg to be more tolerant of uid issues
+mkdir -p "$OUTPUT_DIR/etc/dpkg/dpkg.cfg.d"
+cat > "$OUTPUT_DIR/etc/dpkg/dpkg.cfg.d/99-single-uid" <<'EOF'
+force-unsafe-io
+EOF
 
 # Clean up files that cause issues with unprivileged import:
 # 1. Remove device nodes - bwrap mounts its own /dev anyway

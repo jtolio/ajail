@@ -1,49 +1,52 @@
 #!/bin/bash
 #
-# mkalpine.sh - Create an Alpine Linux root filesystem using apk.static
+# mkwolfi.sh - Create a Wolfi Linux root filesystem using apk.static
 #
-# This script must be run as root (sudo ./mkalpine.sh ...)
-# The resulting rootfs can be imported into ajail with:
-#   ajail import <name> <path>
+# Wolfi is a glibc-based distro by Chainguard that uses the same apk package
+# manager as Alpine. It was designed for containers and single-user environments.
+#
+# This script must be run as root (sudo ./mkwolfi.sh ...)
 #
 set -euo pipefail
 
 # Defaults
-ALPINE_BRANCH="latest-stable"
-ALPINE_MIRROR="http://dl-cdn.alpinelinux.org/alpine"
 ARCH="$(uname -m)"
 PACKAGES=""
 TARGET_USER=""
 
-# apk.static download info (from alpine-make-rootfs)
+# apk.static download info (same as Alpine - Wolfi uses compatible apk v2)
 APK_TOOLS_VERSION="2.14.10"
 APK_TOOLS_URI="https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v${APK_TOOLS_VERSION}/x86_64/apk.static"
 APK_TOOLS_SHA256="34bb1a96f0258982377a289392d4ea9f3f4b767a4bb5806b1b87179b79ad8a1c"
 
+# Wolfi repository
+WOLFI_REPO="https://packages.wolfi.dev/os"
+WOLFI_KEY_URL="https://packages.wolfi.dev/os/wolfi-signing.rsa.pub"
+
 # Base packages for a minimal system
-BASE_PACKAGES="alpine-baselayout alpine-keys busybox busybox-suid musl-utils apk-tools"
+BASE_PACKAGES="wolfi-base bash"
 
 usage() {
     cat <<EOF
 Usage: sudo $0 [OPTIONS] <output-dir>
 
-Create a minimal Alpine Linux root filesystem.
+Create a minimal Wolfi Linux root filesystem.
+
+Wolfi is a glibc-based container-oriented distro using the apk package
+manager (same as Alpine). Good for when you need glibc compatibility
+with the simplicity of apk.
 
 Options:
-  -b, --branch BRANCH     Alpine branch (default: $ALPINE_BRANCH)
-                          Examples: latest-stable, v3.20, v3.19, edge
-  -m, --mirror URL        Alpine mirror (default: $ALPINE_MIRROR)
   -a, --arch ARCH         Target architecture (default: $ARCH)
   -p, --packages PKGS     Comma or space-separated list of additional packages
-                          Example: -p vim,git,curl
+                          Example: -p bash,git,curl
   -u, --user USER         Change ownership to USER after creation
-                          (for use with ajail import)
   -h, --help              Show this help
 
 Examples:
-  sudo $0 /tmp/myalpine
-  sudo $0 -b edge -p vim,git /tmp/alpine-edge
-  sudo $0 -p "build-base git" -u \$USER /tmp/devenv
+  sudo $0 /tmp/mywolfi
+  sudo $0 -p bash,git,curl /tmp/wolfi-dev
+  sudo $0 -p "build-base git python3" -u \$USER /tmp/devenv
 
 The script installs: $BASE_PACKAGES
 Additional packages can be added with -p/--packages.
@@ -60,20 +63,16 @@ cleanup() {
     if [[ -n "${APK_STATIC:-}" && -f "$APK_STATIC" ]]; then
         rm -f "$APK_STATIC"
     fi
+    if [[ -n "${KEY_DIR:-}" && -d "$KEY_DIR" ]]; then
+        rm -rf "$KEY_DIR"
+    fi
 }
 trap cleanup EXIT
 
 # Parse arguments
+POSITIONAL=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -b|--branch)
-            ALPINE_BRANCH="$2"
-            shift 2
-            ;;
-        -m|--mirror)
-            ALPINE_MIRROR="$2"
-            shift 2
-            ;;
         -a|--arch)
             ARCH="$2"
             shift 2
@@ -93,17 +92,18 @@ while [[ $# -gt 0 ]]; do
             die "Unknown option: $1"
             ;;
         *)
-            break
+            POSITIONAL+=("$1")
+            shift
             ;;
     esac
 done
 
 # Check for output directory argument
-if [[ $# -lt 1 ]]; then
+if [[ ${#POSITIONAL[@]} -lt 1 ]]; then
     usage 1
 fi
 
-OUTPUT_DIR="$1"
+OUTPUT_DIR="${POSITIONAL[0]}"
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
@@ -131,9 +131,7 @@ else
     die "wget or curl is required"
 fi
 
-echo "Creating Alpine rootfs..."
-echo "  Branch:  $ALPINE_BRANCH"
-echo "  Mirror:  $ALPINE_MIRROR"
+echo "Creating Wolfi rootfs..."
 echo "  Arch:    $ARCH"
 echo "  Output:  $OUTPUT_DIR"
 if [[ -n "$PACKAGES" ]]; then
@@ -167,12 +165,20 @@ if [[ -n "$APK_TOOLS_SHA256" && "$ARCH" == "x86_64" ]]; then
     echo "$APK_TOOLS_SHA256  $APK_STATIC" | sha256sum -c - || die "Checksum verification failed"
 fi
 
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
+# Download Wolfi signing key
+KEY_DIR=$(mktemp -d)
+echo "Downloading Wolfi signing key..."
+$DOWNLOAD_CMD "$KEY_DIR/wolfi-signing.rsa.pub" "$WOLFI_KEY_URL"
 
-# Build repository URLs
-REPO_MAIN="${ALPINE_MIRROR}/${ALPINE_BRANCH}/main"
-REPO_COMMUNITY="${ALPINE_MIRROR}/${ALPINE_BRANCH}/community"
+# Create output directory with merged /usr layout
+# Wolfi uses usrmerge: /lib, /bin, /sbin are symlinks into /usr.
+# These must exist before apk runs, otherwise apk creates /lib as a real
+# directory and wolfi-baselayout's later attempt to symlink it fails.
+mkdir -p "$OUTPUT_DIR/usr/bin" "$OUTPUT_DIR/usr/lib"
+ln -s usr/bin "$OUTPUT_DIR/bin"
+ln -s usr/bin "$OUTPUT_DIR/sbin"
+ln -s usr/lib "$OUTPUT_DIR/lib"
+ln -s usr/lib "$OUTPUT_DIR/lib64"
 
 # Convert comma-separated packages to space-separated
 PACKAGES="${PACKAGES//,/ }"
@@ -186,10 +192,9 @@ echo
 # Run apk to bootstrap the rootfs
 "$APK_STATIC" \
     --arch "$ARCH" \
-    -X "$REPO_MAIN" \
-    -X "$REPO_COMMUNITY" \
+    -X "$WOLFI_REPO" \
     -U \
-    --allow-untrusted \
+    --keys-dir "$KEY_DIR" \
     --root "$OUTPUT_DIR" \
     --initdb \
     add $ALL_PACKAGES
@@ -197,8 +202,7 @@ echo
 # Set up /etc/apk/repositories for future package installs
 mkdir -p "$OUTPUT_DIR/etc/apk"
 cat > "$OUTPUT_DIR/etc/apk/repositories" <<EOF
-$REPO_MAIN
-$REPO_COMMUNITY
+$WOLFI_REPO
 EOF
 
 # Clean up files that cause issues with unprivileged import:
@@ -217,4 +221,4 @@ if [[ -n "$TARGET_USER" ]]; then
 fi
 
 echo
-echo "Alpine rootfs created successfully at: $OUTPUT_DIR"
+echo "Wolfi rootfs created successfully at: $OUTPUT_DIR"

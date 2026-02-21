@@ -11,10 +11,11 @@ currently ~ 300 lines of clean python.
 ## high level picture
 
 ajail is a bubblewrapped chroot. you store the immutable root filesystem named 
-`name` in `~/.ajail/fs/name`.
+`name` in `~/.ajail/fs/name`, where `default` is used if `--fs=name` isn't
+specified.
 
-when you run `ajail --fs=name <command>` in a folder, a bubblewrapped, chrooted 
-environment is started with the root filesystem named `name`, with the current
+when you run `ajail <command>` in a folder, a bubblewrapped, chrooted
+environment is started with the defaut root filesystem, with the current
 directory mounted inside. the root fs is mounted read only with a read/write
 temporary overlay fs, and the current directory is mounted read/write or read 
 only with a temporary overlay fs, depending on your arguments.
@@ -26,8 +27,9 @@ reality, they only have access to what you've allowed them to have, and root
 operations inside the jail appear as your UID outside the jail.
 
 the key feature this combo of things provides is that inside the jail, system
-packages can be installed ephemerally. `apk add nodejs` will install `nodejs`
-but it will disappear next session. the same applies to changes to `$HOME`.
+packages can be installed ephemerally. `apk add nodejs` or `apt install nodejs`
+will install `nodejs` but it will disappear next session. the same applies to
+changes to `$HOME`.
 
 note that inside the jail, `$HOME` is `/root`, which can be found (and persisted
 with `--home-edit` or `--fs-edit`) at `~/.ajail/fs/<name>/root`.
@@ -49,30 +51,30 @@ something).
 
 ## setup
 
-ajail comes with two scripts, mkalpine.sh and mkdeb.sh. both scripts create
-a rootfs in the given target folder. you use them like
+ajail comes with a script per distro. currently supported distros in `mkfs/`
+are Alpine, Arch, Debian, Nix, Void, and Wolfi. each script creates a rootfs in
+the given target folder. you use them like
 
 ```
-sudo ./mkalpine.sh -u $(whoami) ~/.ajail/fs/alpine -p nano
+sudo ./mkfs/alpine.sh -u $(whoami) ~/.ajail/fs/alpine -p nano
 ```
 
 or
 
 ```
-sudo ./mkdeb.sh -u $(whoami) ~/.ajail/fs/deb -p vim,build-essential
+sudo ./mkfs/debian.sh -u $(whoami) ~/.ajail/fs/deb -p vim,build-essential
 ```
 
 ajail does not create a full user id namespace, but instead just maps your uid
 to root. because of this, there are no users other than root inside the jail.
-this makes `apt` and `dpkg` kind of mad, so Debian based rootfses need all 
-packages preinstalled. `apk` handles this better, so packages can be temporarily
-installed inside of an alpine jail.
+this makes some package installations a little unhappy, but most standard
+distribution packages can install cleanly in your environment.
 
 for a basic setup, run
 
 ```
-sudo ./mkalpine.sh -u $(whoami) ~/.ajail/fs/default -p \
-  bash,build-base,alpine-sdk,go,python3,py3-pip,nodejs,npm,wget,curl,git
+sudo ./mkfs/wolfi.sh -u $(whoami) ~/.ajail/fs/default -p \
+  build-base,go,python3,py3-pip,nodejs,npm,wget,curl,git
 ```
 
 ## usage
@@ -103,7 +105,7 @@ usage: ajail [OPTION]... [<COMMAND>...]
                           current directory's metadata.
  --quiet                  no status output
 
-if [<command>...] is not provided, defaults to 'sh'.
+if [<command>...] is not provided, defaults to 'bash -l'.
 ```
 
 here is how to run a command (`sh`) in the default rootfs with the current
@@ -161,10 +163,11 @@ ajail --ro=.git --home-edit=.claude --home-edit=.claude.json claude
 (note that you will need to install and configure claude with `--fs-edit`
 once first)
 
-this will install vim into an alpine based rootfs:
+this will install vim into a debian based rootfs (`--fs-edit` makes it
+persistent):
 
 ```
-ajail --fs-edit apk add vim
+ajail --fs-edit apt install vim
 ```
 
 this will start claude with its own clone of the current repo (be sure to
@@ -183,7 +186,7 @@ ajail --hide
 ## LLM disclaimer:
 
 ajail is human-written (but with light advice and suggestions from an LLM).
-mkalpine.sh and mkdeb.sh were created with the help of an LLM.
+mkfs/*.sh were created with the help of an LLM.
 
 ## requirements:
 
@@ -191,8 +194,7 @@ mkalpine.sh and mkdeb.sh were created with the help of an LLM.
 * python >= 3.9
 * [bubblewrap](https://github.com/containers/bubblewrap) >= 0.11.0
   (`sudo dnf install bubblewrap` or `sudo apt install bubblewrap`)
-
-* debootstrap for `mkdeb.sh`
+* debootstrap for `mkfs/debian.sh`
 
 ## license
 

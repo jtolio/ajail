@@ -34,7 +34,7 @@ usage: ajail [OPTION]... [<COMMAND>...]
                           current directory's metadata.
  --quiet                  no status output
 
-if [<command>...] is not provided, defaults to 'sh'."""
+if [<command>...] is not provided, defaults to 'bash -l'."""
 
 AJAIL_DIR = Path.home() / ".ajail"
 FS_DIR = AJAIL_DIR / "fs"
@@ -142,7 +142,7 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
 
     # define new environment
     env = {
-        "HOME": "/root",
+        "HOME": "/root", "USER": "root",
         "PATH": ("/root/.local/bin:/usr/local/sbin:/usr/local/bin:"
                  "/usr/sbin:/usr/bin:/sbin:/bin"),
         "TERM": os.environ.get("TERM", "xterm"),
@@ -228,6 +228,7 @@ def main():
     network = True
     submounts, fs_edits = [], []
     command = []
+    pwd_mount_types = {"-ro": READONLY, "-rw": READWRITE, "-hide": HIDEDIR}
 
     # tight control over argument parsing
     while args:
@@ -238,8 +239,8 @@ def main():
         if arg.startswith("-fs="):
             fs_to_use = arg.removeprefix("-fs=")
 
-        elif arg in ("-ro", "-rw", "-hide"):
-            pwd_type = {"-ro": READONLY, "-rw": READWRITE, "-hide": HIDEDIR}[arg]
+        elif arg in pwd_mount_types:
+            pwd_type = pwd_mount_types[arg]
 
         elif arg.startswith("-ro="):
             arg = arg.removeprefix("-ro=")
@@ -289,7 +290,7 @@ def main():
         args = args[1:]
 
     if not command:
-        command = ["sh"]
+        command = ["bash", "-l"]
 
     run(fs_to_use=fs_to_use, pwd_type=pwd_type, network=network,
         submounts=submounts, fs_edits=fs_edits, command=command, clone=clone,
