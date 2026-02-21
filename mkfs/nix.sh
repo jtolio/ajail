@@ -293,6 +293,7 @@ if [ -e /root/.nix-profile/etc/profile.d/nix.sh ]; then
     . /root/.nix-profile/etc/profile.d/nix.sh
 fi
 export NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt
+export NIX_PATH=nixpkgs=flake:nixpkgs
 PROFILE
 
 cat > "$OUTPUT_DIR/root/.bashrc" <<'BASHRC'
