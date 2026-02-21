@@ -191,7 +191,8 @@ mkfs/*.sh were created with the help of an LLM.
 
 ## requirements:
 
-* linux kernel >= 5.13 (overlayfs in user namespaces)
+* linux kernel >= 6.2 (overlayfs in user namespaces, TIOCSTI disabled by default
+  to prevent CVE-2017-5226 sandbox escape)
 * python >= 3.9
 * [bubblewrap](https://github.com/containers/bubblewrap) >= 0.11.0
   (`sudo dnf install bubblewrap` or `sudo apt install bubblewrap`)

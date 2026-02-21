@@ -141,6 +141,12 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
         "--clearenv",
     ]
 
+    try:  # handle CVE-2017-5226 if the kernel doesn't have TIOCSTI disabled.
+        if Path("/proc/sys/dev/tty/legacy_tiocsti").read_text().strip() != "0":
+            bwrap_cmd.append("--new-session")
+    except FileNotFoundError:
+        bwrap_cmd.append("--new-session")
+
     # define new environment
     env = {
         "HOME": "/root", "USER": "root",
