@@ -87,12 +87,13 @@ usage: ajail [OPTION]... [<COMMAND>...]
  --fs=<ROOT_FS>           specify the root fs to use. by default uses 'default'.
                           if ROOT_FS is not an absolute path, the name is looked
                           for at ~/.ajail/fs/<ROOT_FS>.
- --ro[=<DIR>]             wrap the provided directory in a temporary overlay.
-                          if no directory is specified, cwd is assumed.
+ --ro[=<DIR>]             wrap the provided directory in a temporary rw overlay.
+                          if no directory is specified, cwd is assumed. DIR can
+                          be absolute or relative. see --rw and --hide.
  --rw[=<DIR>]             make changes to the provided directory persistent.
  --hide[=<DIR>]           make the provided directory appear empty.
- --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary overlay
-                          unless rw is provided for persistence.
+ --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary rw overlay
+                          on top unless rw is provided for persistence.
  --fs-edit[=<DIR>]        make changes to the root filesystem persistent. if
                           <DIR> is provided, just that subtree.
  --home-edit[=<SUBDIR>]   a subset of --fs-edit, make just jail-home changes
@@ -100,7 +101,7 @@ usage: ajail [OPTION]... [<COMMAND>...]
  --no-net                 disable network access.
  --clone                  if the current directory is a source repository,
                           instead of mounting the current directory directly,
-                          we will make a new clone of the source repository,
+                          we will make a new clone of the source repository
                           and mount that. pushing from inside will update the
                           current directory's metadata.
  --quiet                  no status output
