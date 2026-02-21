@@ -11,7 +11,7 @@ currently ~ 300 lines of clean python.
 ## high level picture
 
 ajail is a bubblewrapped chroot. you store the immutable root filesystem named 
-`name` in `~/.ajail/fs/name`, where `default` is used if `--fs=name` isn't
+`name` in `~/.ajail/fs/<name>`, where `<name>` is `default` if `--fs=name` isn't
 specified.
 
 when you run `ajail <command>` in a folder, a bubblewrapped, chrooted
@@ -52,7 +52,7 @@ something).
 ## setup
 
 ajail comes with a script per distro. currently supported distros in `mkfs/`
-are Alpine, Arch, Debian, Nix, Void, and Wolfi. each script creates a rootfs in
+are Alpine, Arch, Debian, Nix, Ubuntu, Void, and Wolfi. each script creates a rootfs in
 the given target folder. you use them like
 
 ```
@@ -194,7 +194,7 @@ mkfs/*.sh were created with the help of an LLM.
 * python >= 3.9
 * [bubblewrap](https://github.com/containers/bubblewrap) >= 0.11.0
   (`sudo dnf install bubblewrap` or `sudo apt install bubblewrap`)
-* debootstrap for `mkfs/debian.sh`
+* debootstrap for `mkfs/debian.sh` and `mkfs/ubuntu.sh`
 
 ## license
 
