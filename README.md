@@ -106,7 +106,7 @@ usage: ajail [OPTION]... [<COMMAND>...]
                           current directory's metadata.
  --quiet                  no status output
 
-if [<command>...] is not provided, defaults to 'bash -l'.
+if [<command>...] is not provided, defaults to 'bash'.
 ```
 
 here is how to run a command (`sh`) in the default rootfs with the current

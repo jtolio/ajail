@@ -35,7 +35,7 @@ usage: ajail [OPTION]... [<COMMAND>...]
                           current directory's metadata.
  --quiet                  no status output
 
-if [<command>...] is not provided, defaults to 'bash -l'."""
+if [<command>...] is not provided, defaults to 'bash'."""
 
 AJAIL_DIR = Path.home() / ".ajail"
 FS_DIR = AJAIL_DIR / "fs"
@@ -297,7 +297,7 @@ def main():
         args = args[1:]
 
     if not command:
-        command = ["bash", "-l"]
+        command = ["bash"]
 
     run(fs_to_use=fs_to_use, pwd_type=pwd_type, network=network,
         submounts=submounts, fs_edits=fs_edits, command=command, clone=clone,
