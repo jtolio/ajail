@@ -9,7 +9,7 @@
 set -euo pipefail
 
 # Defaults
-SUITE="bookworm"
+SUITE="stable"
 MIRROR="http://deb.debian.org/debian"
 VARIANT="minbase"
 PACKAGES=""
@@ -23,7 +23,7 @@ Create a minimal Debian root filesystem using debootstrap.
 
 Options:
   -s, --suite SUITE       Debian suite (default: $SUITE)
-                          Examples: bookworm, bullseye, trixie, sid
+                          Examples: stable, testing, bookworm, sid
   -m, --mirror URL        Debian mirror (default: $MIRROR)
   -p, --packages PKGS     Comma-separated list of additional packages
                           Example: -p vim,git,curl
@@ -33,7 +33,7 @@ Options:
 
 Examples:
   sudo $0 /tmp/mydebian
-  sudo $0 -s sid -p vim,git /tmp/mysid
+  sudo $0 -s testing -p vim,git /tmp/mytesting
   sudo $0 -p build-essential,git -u \$USER /tmp/devenv
 
 The script uses --variant=minbase for a minimal installation.
