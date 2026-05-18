@@ -92,7 +92,8 @@ def clone_repo(fs_to_use, pwd):
 
 
 def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
-        clone=False, env_override=False, show_status=False):
+        clone=False, env_override=False, show_status=False,
+        bwrap_args=None):
 
     if fs_to_use.startswith("/"):
         fs_path = Path(fs_to_use)
@@ -211,10 +212,14 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
 
         # start in pwd if mounted
         "--chdir", str(pwd),
-
-        "--"
     ])
 
+    if bwrap_args is not None:
+        if show_status:
+            print(" ", " ".join(bwrap_args))
+        bwrap_cmd.extend(bwrap_args)
+
+    bwrap_cmd.append("--")
     bwrap_cmd.extend(command)
 
     if show_status:
@@ -236,6 +241,7 @@ def main():
     submounts, fs_edits = [], []
     command = []
     pwd_mount_types = {"-ro": READONLY, "-rw": READWRITE, "-hide": HIDEDIR}
+    bwrap_args = []
 
     # tight control over argument parsing
     while args:
@@ -281,6 +287,8 @@ def main():
             clone = True
         elif arg == "-quiet":
             show_status = False
+        elif arg.startswith("-bw="):
+            bwrap_args.append(arg.removeprefix("-bw="))
 
         elif arg == "-":
             command = args[1:]
@@ -301,7 +309,7 @@ def main():
 
     run(fs_to_use=fs_to_use, pwd_type=pwd_type, network=network,
         submounts=submounts, fs_edits=fs_edits, command=command, clone=clone,
-        env_override=True, show_status=show_status)
+        env_override=True, show_status=show_status, bwrap_args=bwrap_args)
     raise Exception("unreachable")
 
 
