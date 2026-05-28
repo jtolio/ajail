@@ -217,7 +217,9 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
 
     if bwrap_args is not None:
         if show_status:
-            print(" ", " ".join(bwrap_args))
+            print(" ", " ".join(
+                ("\n  " + arg if arg.startswith("-") and i > 0 else arg
+                 for i, arg in enumerate(bwrap_args))))
         bwrap_cmd.extend(bwrap_args)
 
     bwrap_cmd.append("--")
