@@ -63,7 +63,7 @@ def mount_helper(exterior_path, interior_path, mount_type, show_status):
     return mounts[mount_type]
 
 
-def clone_repo(fs_to_use, pwd):
+def clone_repo(fs_to_use, pwd, bwrap_bin):
     # make directory for independent clone
     clone_base = AJAIL_DIR / "clone"
     os.makedirs(str(clone_base), exist_ok=True)
@@ -79,7 +79,8 @@ def clone_repo(fs_to_use, pwd):
         os.chdir(clone_dir)
         run(fs_to_use=fs_to_use, pwd_type=READWRITE, network=False, fs_edits=[],
             submounts=[(READONLY, str(pwd / ".git"), "/ajail/origin")],
-            command=["git", "clone", "-q", "/ajail/origin", "."])
+            command=["git", "clone", "-q", "/ajail/origin", "."],
+            bwrap_bin=bwrap_bin)
         raise Exception("unreachable")
 
     # wait for clone
@@ -93,7 +94,7 @@ def clone_repo(fs_to_use, pwd):
 
 def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
         clone=False, env_override=False, show_status=False,
-        bwrap_args=None):
+        bwrap_args=None, bwrap_bin="bwrap"):
 
     if fs_to_use.startswith("/"):
         fs_path = Path(fs_to_use)
@@ -112,8 +113,8 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
             print("Please create a rootfs.", file=sys.stderr)
         sys.exit(1)
 
-    if shutil.which("bwrap") is None:
-        print("Error: bwrap not found. Please install bubblewrap.",
+    if shutil.which(bwrap_bin) is None:
+        print("Error: %r not found. Please install bubblewrap." % bwrap_bin,
               file=sys.stderr)
         sys.exit(1)
 
@@ -125,7 +126,7 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
         sys.exit(1)
 
     bwrap_cmd = [
-        "bwrap",
+        bwrap_bin,
         "--unshare-all",  # default nothing
 
         # unshare-all only tries on some things. let's explicitly be even more
@@ -195,7 +196,7 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
         if show_status:
             print("  (Cloning new independent workspace...)")
 
-        clone_dir = clone_repo(fs_to_use=fs_to_use, pwd=pwd)
+        clone_dir = clone_repo(fs_to_use=fs_to_use, pwd=pwd, bwrap_bin=bwrap_bin)
         bwrap_cmd.extend(mount_helper(pwd / ".git", "/ajail/origin", pwd_type, show_status))
         bwrap_cmd.extend(mount_helper(clone_dir, pwd, pwd_type, show_status))
 
@@ -235,6 +236,7 @@ def main():
         args = os.environ.get("AJAIL_ARGS").split(";") + args
 
     fs_to_use = "default"
+    bwrap_bin = "bwrap"
     pwd_type = READWRITE
     clone, show_status = False, True
     network = True
@@ -289,6 +291,8 @@ def main():
             show_status = False
         elif arg.startswith("-bw="):
             bwrap_args.append(arg.removeprefix("-bw="))
+        elif arg.startswith("-bwrap-bin="):
+            bwrap_bin = arg.removeprefix("-bwrap-bin=")
 
         elif arg == "-":
             command = args[1:]
@@ -309,7 +313,8 @@ def main():
 
     run(fs_to_use=fs_to_use, pwd_type=pwd_type, network=network,
         submounts=submounts, fs_edits=fs_edits, command=command, clone=clone,
-        env_override=True, show_status=show_status, bwrap_args=bwrap_args)
+        env_override=True, show_status=show_status, bwrap_args=bwrap_args,
+        bwrap_bin=bwrap_bin)
     raise Exception("unreachable")
 
 
