@@ -45,10 +45,6 @@ AJAIL_DIR = Path.home() / ".ajail"
 FS_DIR = AJAIL_DIR / "fs"
 
 
-def nonalnum_replace(s, r):
-    return "".join(c if c.isalnum() else r for c in s)
-
-
 def mount_helper(exterior_path, interior_path, mount_type, show_status):
     exterior_path = str(Path(exterior_path).absolute())
     interior_path = str(Path(interior_path).absolute())
@@ -75,7 +71,7 @@ def clone_repo(fs_to_use, pwd, bwrap_bin):
     clone_dir = Path(tempfile.mkdtemp(
         dir=str(clone_base),
         prefix="%s-%s-" % (
-            nonalnum_replace(str(pwd), '_'),
+            "".join(c if c.isalnum() else '_' for c in str(pwd)),
             datetime.now().strftime("%Y%m%d"))))
 
     # clone current .git to new directory inside a jail
@@ -209,10 +205,7 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
         bwrap_cmd.extend(["--cap-add", cap])
 
     bwrap_cmd.extend([
-        # set hostname
-        "--hostname", "ajail-" + nonalnum_replace(fs_to_use, "-") + ".localhost",
-
-        # start in pwd if mounted
+        "--hostname", "localhost",
         "--chdir", str(pwd),
     ])
 
