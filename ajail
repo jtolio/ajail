@@ -210,7 +210,7 @@ def run(fs_to_use, pwd_type, network, submounts, fs_edits, command,
 
     bwrap_cmd.extend([
         # set hostname
-        "--hostname", "ajail-" + nonalnum_replace(fs_to_use, "-"),
+        "--hostname", "ajail-" + nonalnum_replace(fs_to_use, "-") + ".localhost",
 
         # start in pwd if mounted
         "--chdir", str(pwd),
