@@ -89,7 +89,8 @@ usage: ajail [OPTION]... [<COMMAND>...]
                           for at ~/.ajail/fs/<ROOT_FS>.
  --ro[=<DIR>]             wrap the provided directory in a temporary rw overlay.
                           if no directory is specified, cwd is assumed. DIR can
-                          be absolute or relative. see --rw and --hide.
+                          be absolute or relative. see --rol, --rw, and --hide.
+ --rol[=<DIR>]            readonly locked. --ro but without the rw overlay.
  --rw[=<DIR>]             make changes to the provided directory persistent.
  --hide[=<DIR>]           make the provided directory appear empty.
  --mount=<SRC>,<DST>[,rw] mount SRC at DST. mounted with a temporary rw overlay
@@ -104,7 +105,10 @@ usage: ajail [OPTION]... [<COMMAND>...]
                           we will make a new clone of the source repository
                           and mount that. pushing from inside will update the
                           current directory's metadata.
- --quiet                  no status output
+ --dev=<DEV>              device to mount inside.
+ --cap-add=<CAP>          capability to add.
+ --bwrap-bin=<BIN>        bwrap binary to use.
+ --quiet                  no status output.
 
 if [<command>...] is not provided, defaults to 'bash'.
 ```
