@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""
+bwrap-with-subuid: a small wrapper around bubblewrap that sets up a multi-UID
+user namespace via /etc/subuid and /etc/subgid, then hands the namespace to
+bwrap.
+
+Why this exists:
+  When invoked unprivileged with --unshare-user, bwrap by default creates a
+  user namespace with a single-UID mapping: the calling user's host UID maps
+  to "fake root" (uid 0) inside the namespace. This works for most things,
+  but it breaks any code inside the jail that wants to create its own nested
+  user namespaces: per user_namespaces(7), a nested namespace can only be
+  populated with UIDs the parent namespace already owns, and a single-UID
+  parent namespace owns exactly one UID.
+
+  bwrap exposes --userns-block-fd as a hook for an external helper to
+  populate the uid/gid maps with whatever range the host admin has granted
+  the calling user via /etc/subuid and /etc/subgid. The setuid-root helpers
+  newuidmap and newgidmap (from the `uidmap` package) enforce that the
+  mapping stays within that allocated range.
+
+  This wrapper does the dance. The caller just runs bwrap-with-subuid with
+  the same arguments they'd pass to bwrap; we inject --userns-block-fd and
+  --info-fd ourselves.
+
+Usage:
+  bwrap-with-subuid <bwrap args...>
+
+Requires:
+  - Python 3.12+
+  - bubblewrap (bwrap)
+  - newuidmap, newgidmap (the `uidmap` package on Debian/Ubuntu)
+  - an entry for the calling user in /etc/subuid and /etc/subgid
+  - the caller's bwrap args must include --unshare-user (otherwise there's no
+    namespace to map and this wrapper has nothing to do; bwrap will error)
+"""
+
+import json, os, pwd, subprocess, sys
+
+
+def read_subid_range(path, username):
+    with open(path) as f:
+        for line in f:
+            parts = line.strip().split(":")
+            if len(parts) == 3 and parts[0] == username:
+                return parts[1], parts[2]
+    raise Exception("no %r entry for user %r" % (path, username))
+
+
+def main():
+    username = pwd.getpwuid(os.getuid()).pw_name
+    sub_uid = read_subid_range("/etc/subuid", username)
+    sub_gid = read_subid_range("/etc/subgid", username)
+
+    userns_block_r, userns_block_w = os.pipe()
+    os.set_inheritable(userns_block_r, True)
+    info_r, info_w = os.pipe()
+    os.set_inheritable(info_w, True)
+
+    bwrap_cmd = ["bwrap", "--userns-block-fd", str(userns_block_r), "--info-fd", str(info_w)]
+    bwrap_proc = subprocess.Popen(bwrap_cmd + sys.argv[1:], pass_fds=(userns_block_r, info_w))
+
+    os.close(userns_block_r)
+    os.close(info_w)
+
+    with os.fdopen(info_r, "rb") as info_f:
+        info_bytes = info_f.read()
+    try:
+        child_pid = json.loads(info_bytes.decode())["child-pid"]
+    except (ValueError, KeyError):
+        sys.exit(bwrap_proc.wait() or 1)
+
+    subprocess.check_call([
+        "newuidmap", str(child_pid), "0", str(os.getuid()), "1", "1", sub_uid[0], sub_uid[1]])
+    subprocess.check_call([
+        "newgidmap", str(child_pid), "0", str(os.getgid()), "1", "1", sub_gid[0], sub_gid[1]])
+
+    os.close(userns_block_w)
+    sys.exit(bwrap_proc.wait())
+
+
+if __name__ == "__main__":
+    main()
