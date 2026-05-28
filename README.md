@@ -65,10 +65,14 @@ or
 sudo ./mkfs/debian.sh -u $(whoami) ~/.ajail/fs/deb -p vim,build-essential
 ```
 
-ajail does not create a full user id namespace, but instead just maps your uid
-to root. because of this, there are no users other than root inside the jail.
-this makes some package installations a little unhappy, but most standard
-distribution packages can install cleanly in your environment.
+by default, ajail+bwrap do not create a full user id namespace, but instead just map
+your uid to root. because of this, there are no users other than root inside the
+jail. this makes some package installations a little unhappy, but most standard
+distribution packages can install cleanly in your environment. if you need a 
+working nested user namespace, you can use the provided `bwrap-with-subuid` tool
+with the `--bwrap-bin` option to have a full user id namespace, along with
+appropriate capabilities (`--add-cap` with `CAP_SETUID`, `CAP_SETGID`, 
+`CAP_SETFCAP`, `CAP_CHOWN`).
 
 for a basic setup, run
 
